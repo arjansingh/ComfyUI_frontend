@@ -34,7 +34,7 @@
   />
 
   <NodeTooltip v-if="tooltipEnabled" />
-  <NodeSearchboxPopover />
+  <NodeSearchboxPopover ref="nodeSearchboxPopoverRef" />
 
   <!-- Initialize components after comfyApp is ready. useAbsolutePosition requires
   canvasStore.canvas to be initialized. -->
@@ -49,7 +49,7 @@
 
 <script setup lang="ts">
 import { useEventListener, whenever } from '@vueuse/core'
-import { computed, onMounted, ref, watch, watchEffect } from 'vue'
+import { computed, onMounted, ref, shallowRef, watch, watchEffect } from 'vue'
 
 import LiteGraphCanvasSplitterOverlay from '@/components/LiteGraphCanvasSplitterOverlay.vue'
 import BottomPanel from '@/components/bottomPanel/BottomPanel.vue'
@@ -91,12 +91,16 @@ import { useSettingStore } from '@/stores/settingStore'
 import { useToastStore } from '@/stores/toastStore'
 import { useWorkflowStore } from '@/stores/workflowStore'
 import { useColorPaletteStore } from '@/stores/workspace/colorPaletteStore'
+import { useSearchBoxStore } from '@/stores/workspace/searchBoxStore'
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 
 const emit = defineEmits<{
   ready: []
 }>()
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+const nodeSearchboxPopoverRef = shallowRef<InstanceType<
+  typeof NodeSearchboxPopover
+> | null>(null)
 const settingStore = useSettingStore()
 const nodeDefStore = useNodeDefStore()
 const workspaceStore = useWorkspaceStore()
@@ -320,6 +324,7 @@ onMounted(async () => {
   canvasStore.canvas = comfyApp.canvas
   canvasStore.canvas.render_canvas_border = false
   workspaceStore.spinner = false
+  useSearchBoxStore().setPopoverRef(nodeSearchboxPopoverRef.value)
 
   window.app = comfyApp
   window.graph = comfyApp.graph
