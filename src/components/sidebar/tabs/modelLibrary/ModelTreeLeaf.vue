@@ -3,9 +3,11 @@
     <TreeExplorerTreeNode :node="node">
       <template #before-label>
         <span v-if="modelPreviewUrl" class="model-lib-model-icon-container">
-          <span
-            class="model-lib-model-icon"
-            :style="{ backgroundImage: `url(${modelPreviewUrl})` }"
+          <LazyImage
+            :src="modelPreviewUrl"
+            :alt="`Preview for ${modelDef.title}`"
+            image-class="model-lib-model-icon"
+            root-margin="50px"
           />
         </span>
       </template>
@@ -29,6 +31,7 @@ import {
   ref
 } from 'vue'
 
+import LazyImage from '@/components/common/LazyImage.vue'
 import TreeExplorerTreeNode from '@/components/common/TreeExplorerTreeNode.vue'
 import { ComfyModelDef } from '@/stores/modelStore'
 import { useSettingStore } from '@/stores/settingStore'
@@ -139,8 +142,6 @@ onUnmounted(() => {
   width: 0;
 }
 .model-lib-model-icon {
-  background-size: cover;
-  background-position: center;
   display: inline-block;
   position: relative;
   left: -2.2rem;
