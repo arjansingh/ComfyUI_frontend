@@ -53,7 +53,7 @@
 import ContextMenu from 'primevue/contextmenu'
 import type { MenuItem, MenuItemCommandEvent } from 'primevue/menuitem'
 import Tree from 'primevue/tree'
-import { computed, provide, ref } from 'vue'
+import { computed, provide, ref, shallowRef, triggerRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import TreeExplorerTreeNode from '@/components/common/TreeExplorerTreeNode.vue'
@@ -96,8 +96,40 @@ const {
   }
 )
 
+// Memoization cache for tree node rendering
+const nodeRenderCache = shallowRef<Map<string, RenderedTreeExplorerNode>>(
+  new Map()
+)
+
+// Track last root key to detect when tree structure changes
+let lastRootKey: string | null = null
+
 const renderedRoot = computed<RenderedTreeExplorerNode>(() => {
+  // Check if we need to clear cache (root changed)
+  if (props.root.key !== lastRootKey) {
+    nodeRenderCache.value.clear()
+    lastRootKey = props.root.key
+  }
+
+  // Generate cache key based on relevant dependencies
+  const cacheKey = `${props.root.key}-${JSON.stringify(expandedKeys.value)}-${renameEditingNode.value?.key || ''}`
+
+  // Check cache first
+  const cached = nodeRenderCache.value.get(cacheKey)
+  if (cached) {
+    // Still need to handle new folder node
+    return newFolderNode.value
+      ? combineTrees(cached, newFolderNode.value)
+      : cached
+  }
+
+  // Compute new value if not cached
   const renderedRoot = fillNodeInfo(props.root)
+
+  // Store in cache
+  nodeRenderCache.value.set(cacheKey, renderedRoot)
+  triggerRef(nodeRenderCache)
+
   return newFolderNode.value
     ? combineTrees(renderedRoot, newFolderNode.value)
     : renderedRoot
@@ -131,12 +163,24 @@ const handleImageError = (_e: Event, node: TreeExplorerNode) => {
   failedImages.value[node.key] = true
 }
 
+// Memoized version of fillNodeInfo to avoid redundant calculations
 const fillNodeInfo = (node: TreeExplorerNode): RenderedTreeExplorerNode => {
+  // Check if node is already rendered and cached
+  const nodeKey = `node-${node.key}`
+  const cachedNode = nodeRenderCache.value.get(nodeKey)
+
+  // Only re-render if node properties that affect rendering have changed
+  const isEditingLabel = node.key === renameEditingNode.value?.key
+  if (cachedNode && cachedNode.isEditingLabel === isEditingLabel) {
+    return cachedNode
+  }
+
   const children = node.children?.map(fillNodeInfo) ?? []
   const totalLeaves = node.leaf
     ? 1
     : children.reduce((acc, child) => acc + child.totalLeaves, 0)
-  return {
+
+  const renderedNode: RenderedTreeExplorerNode = {
     ...node,
     icon: getTreeNodeIcon(node),
     previewImageUrl: node.getPreviewImageUrl?.(),
@@ -144,8 +188,13 @@ const fillNodeInfo = (node: TreeExplorerNode): RenderedTreeExplorerNode => {
     type: node.leaf ? 'node' : 'folder',
     totalLeaves,
     badgeText: node.getBadgeText?.(),
-    isEditingLabel: node.key === renameEditingNode.value?.key
+    isEditingLabel
   }
+
+  // Cache individual node
+  nodeRenderCache.value.set(nodeKey, renderedNode)
+
+  return renderedNode
 }
 const onNodeContentClick = async (
   e: MouseEvent,
