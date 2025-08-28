@@ -43,10 +43,46 @@ Key Nx features:
 
 1. **First-time setup**: Run `/setup_repo` Claude command
 2. Make code changes
-3. Run tests (see subdirectory CLAUDE.md files)
-4. Run typecheck, lint, format
-5. Check README updates
-6. Consider docs.comfy.org updates
+3. **Visual verification**: Run `/verify-visually` to test UI changes
+4. **Add translations**: Run `/add-missing-i18n` for new i18n keys
+5. Run tests (see subdirectory CLAUDE.md files)
+6. Run typecheck, lint, format
+7. Check README updates
+8. Consider docs.comfy.org updates
+
+## Claude Commands
+
+The repository includes specialized Claude commands for common workflows:
+
+- `/setup_repo`: Bootstrap monorepo with full verification
+- `/verify-visually`: Systematic visual testing via screenshots
+- `/add-missing-i18n`: Add English translations for new i18n keys
+- `/pr`: Create pull requests with proper formatting
+- `/comprehensive-pr-review`: Detailed code review process
+- `/create-frontend-release`: Release management workflow
+- `/create-hotfix-release`: Emergency release process
+
+## Visual Testing
+
+Use `/verify-visually` for UI change verification:
+
+1. **Server Check**: Ensures dev server is running on port 5173
+2. **Screenshot Analysis**: Captures and analyzes visual changes
+3. **Quality Verification**: Checks layout, styling, responsiveness
+4. **Issue Reporting**: Documents problems with severity levels
+
+Critical for catching visual regressions and layout issues.
+
+## Internationalization (i18n)
+
+Use `/add-missing-i18n` for translation management:
+
+1. **Key Detection**: Finds new `t()`, `st()`, `$t()` function calls
+2. **English Translation**: Adds entries to `src/locales/en/main.json`
+3. **Dot Notation Mapping**: Converts `g.user.name` to nested JSON structure
+4. **Automated Workflow**: Other languages handled by `i18n.yaml` workflow
+
+**Important**: Only modify English locale file manually.
 
 ## Git Conventions
 
@@ -73,6 +109,21 @@ Key Nx features:
 - Check README files in key folders (tests-ui, browser_tests, composables, etc.)
 - Prefer running single tests for performance
 - Use --help for unfamiliar CLI tools
+- Use `nx --help` to explore Nx commands and task orchestration
+
+## Component Development
+
+- **Storybook**: Run `pnpm storybook` for component documentation and testing
+- **Component Tests**: Use `pnpm test:component` for isolated component testing
+- **Visual Testing**: Use `/verify-visually` after UI changes
+- **Stories**: Write component stories for documentation and visual regression testing
+
+## Advanced Development Tools
+
+- **Knip**: Run `pnpm knip` to detect unused code and dependencies
+- **Schema Generation**: Use `pnpm json-schema` to generate TypeScript schemas
+- **Electron Mode**: Use `pnpm dev:electron` for Electron development
+- **Build Analysis**: Nx provides build caching and dependency analysis
 
 ## GitHub Integration
 
