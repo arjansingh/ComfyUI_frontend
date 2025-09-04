@@ -19,7 +19,7 @@ export const useAssetBrowserDialog = () => {
       component: AssetBrowserDialog,
       props: {
         onClose: hide,
-        onSelect: options?.onSelect
+        ...(options?.onSelect && { onSelect: options.onSelect })
       }
     })
   }

@@ -5,7 +5,7 @@
     </template>
 
     <template #content>
-      <div class="flex flex-wrap gap-2">
+      <div class="AssetBrowserContainer flex flex-wrap gap-2">
         <CardContainer
           v-for="asset in filteredAssets"
           :key="asset.id"
@@ -67,7 +67,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, provide, ref, watch } from 'vue'
-import { useI18n } from 'vue-i18n'
 
 import IconButton from '@/components/button/IconButton.vue'
 import CardBottom from '@/components/card/CardBottom.vue'
@@ -79,8 +78,6 @@ import BaseWidgetLayout from '@/components/widget/layout/BaseWidgetLayout.vue'
 import { useAssetStore } from '@/stores/assetStore'
 import type { Asset } from '@/types/assetTypes'
 import { OnCloseKey } from '@/types/widgetTypes'
-
-const { t } = useI18n()
 
 const props = defineProps<{
   onClose: () => void
@@ -98,13 +95,13 @@ const filteredAssets = computed(() => {
 
 function formatFileSize(bytes?: number): string {
   if (!bytes) return 'Unknown'
-  
+
   const sizes = ['B', 'KB', 'MB', 'GB']
   if (bytes === 0) return '0 B'
-  
+
   const i = Math.floor(Math.log(bytes) / Math.log(1024))
   const size = (bytes / Math.pow(1024, i)).toFixed(1)
-  
+
   return `${size} ${sizes[i]}`
 }
 
