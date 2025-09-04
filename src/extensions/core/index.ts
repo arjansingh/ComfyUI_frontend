@@ -1,3 +1,4 @@
+import '../assetBrowserExtension'
 import './clipspace'
 import './contextMenuFilter'
 import './dynamicPrompts'
