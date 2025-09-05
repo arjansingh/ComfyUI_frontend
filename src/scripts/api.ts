@@ -241,6 +241,30 @@ export class PromptExecutionError extends Error {
   }
 }
 
+// Asset API types for migration
+interface AssetInfo {
+  id: string
+  name: string
+  asset_hash: string
+  preview_hash?: string
+  user_metadata: Record<string, any>
+  created_at: string
+  updated_at: string
+  last_access_time: string
+  tags: string[]
+}
+
+interface AssetsResponse {
+  assets: AssetInfo[]
+  total: number
+  has_more: boolean
+}
+
+// Asset scanning types
+interface AssetScanRequest {
+  roots: string[]
+}
+
 export class ComfyApi extends EventTarget {
   #registered = new Set()
   api_host: string
@@ -489,7 +513,7 @@ export class ComfyApi extends EventTarget {
               const metadata = JSON.parse(decoder4.decode(metadataBytes))
               const imageData4 = event.data.slice(8 + metadataLength)
 
-              let imageMime4 = metadata.image_type
+              const imageMime4 = metadata.image_type
 
               const imageBlob4 = new Blob([imageData4], {
                 type: imageMime4
@@ -672,18 +696,159 @@ export class ComfyApi extends EventTarget {
   }
 
   /**
+   * Triggers asset scanning and waits for completion with exponential backoff
+   * @private
+   */
+  private async triggerAssetScan(): Promise<boolean> {
+    try {
+      const scanRequest: AssetScanRequest = {
+        roots: ['models', 'input', 'output']
+      }
+
+      // Schedule the scan
+      const res = await this.fetchApi('/assets/scan/schedule', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(scanRequest)
+      })
+
+      if (res.status < 200 || res.status >= 300) {
+        return false
+      }
+
+      // Wait with exponential backoff: 500ms, 1s, 2s
+      const delays = [500, 1000, 2000]
+
+      for (let i = 0; i < delays.length; i++) {
+        await new Promise((resolve) => setTimeout(resolve, delays[i]))
+
+        try {
+          const scanStatusRes = await this.fetchApi('/assets/scan')
+          if (scanStatusRes.status === 200) {
+            const scanStatus = await scanStatusRes.json()
+            if (
+              typeof scanStatus === 'object' &&
+              scanStatus.status !== 'running' &&
+              scanStatus.status !== 'pending'
+            ) {
+              return true
+            }
+          }
+        } catch (statusError) {
+          // Continue to next retry
+          continue
+        }
+      }
+
+      // After 3 retries, assume scan completed
+      return true
+    } catch (error) {
+      console.warn(
+        'Asset scanning failed:',
+        error instanceof Error ? error.message : String(error)
+      )
+      return false
+    }
+  }
+
+  /**
    * Gets a list of model folder keys (eg ['checkpoints', 'loras', ...])
    * @returns The list of model folder keys
    */
   async getModelFolders(): Promise<{ name: string; folders: string[] }[]> {
-    const res = await this.fetchApi(`/experiment/models`)
-    if (res.status === 404) {
-      return []
+    try {
+      const res = await this.fetchApi('/assets?include_tags=models&limit=500')
+      if (res.status === 404) {
+        return []
+      }
+      if (!res.ok) {
+        throw new Error(
+          `Failed to load model folders: Server returned ${res.status}`
+        )
+      }
+
+      const assetsResponse: AssetsResponse = await res.json()
+
+      if (!assetsResponse.assets || !Array.isArray(assetsResponse.assets)) {
+        throw new Error('Invalid response format from assets API')
+      }
+
+      // If no assets found, trigger scanning and retry once
+      if (assetsResponse.assets.length === 0) {
+        const scanSuccess = await this.triggerAssetScan()
+        if (scanSuccess) {
+          try {
+            // Retry the API call after scanning
+            const retryRes = await this.fetchApi(
+              '/assets?include_tags=models&limit=500'
+            )
+            if (retryRes.ok) {
+              const retryResponse: AssetsResponse = await retryRes.json()
+              if (
+                retryResponse.assets &&
+                Array.isArray(retryResponse.assets) &&
+                retryResponse.assets.length > 0
+              ) {
+                // Process the retry response
+                const systemTags = new Set(['models', 'input', 'output'])
+                const folderTagsSet = new Set<string>()
+
+                for (const asset of retryResponse.assets) {
+                  if (asset.tags && Array.isArray(asset.tags)) {
+                    for (const tag of asset.tags) {
+                      if (!systemTags.has(tag)) {
+                        folderTagsSet.add(tag)
+                      }
+                    }
+                  }
+                }
+
+                return Array.from(folderTagsSet).map((tag) => ({
+                  name: tag,
+                  folders: []
+                }))
+              }
+            }
+          } catch (retryError) {
+            console.warn(
+              'Failed to retry assets API after scanning:',
+              retryError instanceof Error
+                ? retryError.message
+                : String(retryError)
+            )
+          }
+        }
+        return []
+      }
+
+      // Extract unique folder tags (excluding system tags)
+      const systemTags = new Set(['models', 'input', 'output'])
+      const folderTagsSet = new Set<string>()
+
+      for (const asset of assetsResponse.assets) {
+        if (asset.tags && Array.isArray(asset.tags)) {
+          for (const tag of asset.tags) {
+            if (!systemTags.has(tag)) {
+              folderTagsSet.add(tag)
+            }
+          }
+        }
+      }
+
+      // Convert to old format - return name/folders structure for backwards compatibility
+      return Array.from(folderTagsSet).map((tag) => ({
+        name: tag,
+        folders: []
+      }))
+    } catch (error) {
+      // Re-throw the original error to avoid double-wrapping
+      if (error instanceof Error) {
+        throw error
+      }
+      throw new Error(`Failed to load model folders: ${String(error)}`)
     }
-    const folderBlacklist = ['configs', 'custom_nodes']
-    return (await res.json()).filter(
-      (folder: string) => !folderBlacklist.includes(folder)
-    )
   }
 
   /**
@@ -693,12 +858,75 @@ export class ComfyApi extends EventTarget {
    */
   async getModels(
     folder: string
-  ): Promise<{ name: string; pathIndex: number }[]> {
-    const res = await this.fetchApi(`/experiment/models/${folder}`)
-    if (res.status === 404) {
-      return []
+  ): Promise<{ name: string; pathIndex: number; assetId?: string }[]> {
+    try {
+      const res = await this.fetchApi(
+        `/assets?include_tags=models,${encodeURIComponent(folder)}&sort=name&order=asc&limit=500`
+      )
+      if (res.status === 404) {
+        return []
+      }
+      if (!res.ok) {
+        throw new Error(
+          `Failed to load models for ${folder}: Server returned ${res.status}`
+        )
+      }
+
+      const assetsResponse: AssetsResponse = await res.json()
+
+      if (!assetsResponse.assets || !Array.isArray(assetsResponse.assets)) {
+        throw new Error('Invalid response format from assets API')
+      }
+
+      // If no assets found, trigger scanning and retry once
+      if (assetsResponse.assets.length === 0) {
+        const scanSuccess = await this.triggerAssetScan()
+        if (scanSuccess) {
+          try {
+            // Retry the API call after scanning
+            const retryRes = await this.fetchApi(
+              `/assets?include_tags=models,${encodeURIComponent(folder)}&sort=name&order=asc&limit=500`
+            )
+            if (retryRes.ok) {
+              const retryResponse: AssetsResponse = await retryRes.json()
+              if (
+                retryResponse.assets &&
+                Array.isArray(retryResponse.assets) &&
+                retryResponse.assets.length > 0
+              ) {
+                // Process the retry response
+                return retryResponse.assets.map((asset, index) => ({
+                  name: asset.name,
+                  pathIndex: index,
+                  assetId: asset.id
+                }))
+              }
+            }
+          } catch (retryError) {
+            console.warn(
+              'Failed to retry assets API after scanning:',
+              retryError instanceof Error
+                ? retryError.message
+                : String(retryError)
+            )
+          }
+        }
+        return []
+      }
+
+      // Map to old format with synthetic pathIndex and include assetId for new preview URLs
+      return assetsResponse.assets.map((asset, index) => ({
+        name: asset.name,
+        pathIndex: index,
+        assetId: asset.id // Add UUID for new preview URL generation
+      }))
+    } catch (error) {
+      // Re-throw the original error to avoid double-wrapping
+      if (error instanceof Error) {
+        throw error
+      }
+      throw new Error(`Failed to load models for ${folder}: ${String(error)}`)
     }
-    return await res.json()
   }
 
   /**

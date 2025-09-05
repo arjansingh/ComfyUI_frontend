@@ -107,8 +107,29 @@ test.describe('Missing models warning', () => {
       ])
     }
     await comfyPage.page.route(
-      '**/api/experiment/models',
-      (route) => route.fulfill(modelFoldersRes),
+      '**/api/assets?include_tags=models&limit=500',
+      (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            items: [
+              {
+                id: 'test-asset-id-1',
+                name: 'test-model.safetensors',
+                asset_hash: 'blake3:test123',
+                tags: ['models', 'text_encoders'],
+                user_metadata: {},
+                created_at: '2024-01-01T00:00:00Z',
+                updated_at: '2024-01-01T00:00:00Z',
+                last_access_time: '2024-01-01T00:00:00Z'
+              }
+            ],
+            total: 1,
+            offset: 0,
+            limit: 500
+          })
+        }),
       { times: 1 }
     )
 
@@ -125,8 +146,29 @@ test.describe('Missing models warning', () => {
       ])
     }
     await comfyPage.page.route(
-      '**/api/experiment/models/text_encoders',
-      (route) => route.fulfill(clipModelsRes),
+      '**/api/assets?include_tags=models,text_encoders&sort=name&order=asc&limit=500',
+      (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            items: [
+              {
+                id: 'test-asset-id-2',
+                name: 'fake_model.safetensors',
+                asset_hash: 'blake3:test456',
+                tags: ['models', 'text_encoders'],
+                user_metadata: {},
+                created_at: '2024-01-01T00:00:00Z',
+                updated_at: '2024-01-01T00:00:00Z',
+                last_access_time: '2024-01-01T00:00:00Z'
+              }
+            ],
+            total: 1,
+            offset: 0,
+            limit: 500
+          })
+        }),
       { times: 1 }
     )
 

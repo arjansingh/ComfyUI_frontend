@@ -56,8 +56,15 @@ export class ComfyModelDef {
   is_load_requested: boolean = false
   /** A string full of auto-computed lowercase-only searchable text for this model */
   searchable: string = ''
+  /** Asset UUID from the new assets API, used for preview URLs */
+  assetId?: string
 
-  constructor(name: string, directory: string, pathIndex: number) {
+  constructor(
+    name: string,
+    directory: string,
+    pathIndex: number,
+    assetId?: string
+  ) {
     this.path_index = pathIndex
     this.file_name = name
     this.normalized_file_name = name.replaceAll('\\', '/')
@@ -71,6 +78,7 @@ export class ComfyModelDef {
     this.title = this.simplified_file_name
     this.directory = directory
     this.key = `${directory}/${this.normalized_file_name}`
+    this.assetId = assetId
     this.updateSearchable()
   }
 
@@ -172,7 +180,8 @@ export class ModelFolder {
       this.models[`${model.pathIndex}/${model.name}`] = new ComfyModelDef(
         model.name,
         this.directory,
-        model.pathIndex
+        model.pathIndex,
+        model.assetId
       )
     }
     this.state = ResourceState.Loaded

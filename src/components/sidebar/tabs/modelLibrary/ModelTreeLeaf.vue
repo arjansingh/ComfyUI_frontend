@@ -47,6 +47,13 @@ const modelPreviewUrl = computed(() => {
   if (modelDef.value.image) {
     return modelDef.value.image
   }
+
+  // Use new assets API with UUID if available, otherwise fall back to old path-based URL
+  if (modelDef.value.assetId) {
+    return `/api/assets/${modelDef.value.assetId}/content?disposition=inline`
+  }
+
+  // Fallback to old URL format for backwards compatibility
   const folder = modelDef.value.directory
   const path_index = modelDef.value.path_index
   const extension = modelDef.value.file_name.split('.').pop()
