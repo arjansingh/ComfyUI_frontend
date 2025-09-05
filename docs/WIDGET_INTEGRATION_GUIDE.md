@@ -1,52 +1,73 @@
-# Widget Integration Guide: Vue Components + LiteGraph
+# Widget Integration Guide: Universal Patterns + ComfyUI Implementation
 
 ## Overview
-This guide documents how to integrate Vue components with the LiteGraph widget system. The primary use case is replacing standard widgets (combo, text, number, etc.) with custom Vue components that provide enhanced UI experiences through any presentation pattern - inline editors, dropdowns, modals, overlays, or specialized controls.
 
-**Common Use Cases:**
-- Asset browsers with modal dialogs (checkpoints, LoRAs, VAEs, schedulers)
-- Advanced text editors with inline syntax highlighting  
-- Interactive parameter controls with dropdown sliders and presets
-- File upload interfaces with drag-and-drop overlays
-- Multi-select components with popup search and filtering
-- Color pickers, date selectors, or other specialized input widgets
+This guide documents universal patterns for integrating Vue components with LiteGraph widget systems, with concrete ComfyUI implementation examples. The content is organized in three progressive layers:
 
-**Core Pattern:** This guide demonstrates the complete pattern using a modal asset browser example, but the same architectural principles apply to any widget replacement scenario regardless of presentation style (modal, inline, dropdown, overlay, etc.).
+- **Part I: Universal Architecture** - Transferable principles that work across any Vue+LiteGraph project
+- **Part II: ComfyUI Implementation** - Specific working examples and patterns for ComfyUI development  
+- **Part III: Adaptation Guide** - How to apply universal principles to other Vue+LiteGraph projects
 
-## Architecture Layers
+**Common Use Cases Across Projects:**
+- Asset browsers with modal dialogs (models, textures, presets, files)
+- Advanced text editors with syntax highlighting and autocomplete
+- Interactive parameter controls with dropdowns and sliders
+- File upload interfaces with drag-and-drop overlays  
+- Multi-select components with search and filtering
+- Color pickers, date selectors, and specialized input widgets
+
+**Documentation Structure:** Universal principles are demonstrated through ComfyUI examples, then generalized for adaptation to other projects.
+
+---
+
+# Part I: Universal Architecture Principles
+
+## Three-Layer Integration Architecture
+
+The fundamental pattern for Vue+LiteGraph integration consists of three distinct layers with clear separation of concerns:
 
 ```
 ┌─────────────────────────────────────┐
 │           Vue App Layer             │
-│  - YourCustomWidget.vue            │
-│  - YourBrowserDialog.vue           │
-│  - PrimeVue Components             │
+│  - CustomWidget.vue                 │
+│  - ModalDialog.vue                  │
+│  - UI Framework Components          │
 └─────────────────────────────────────┘
                   ↕
 ┌─────────────────────────────────────┐
 │         Integration Layer           │
-│  - useYourCustomWidget()           │
-│  - ComponentWidgetImpl             │
-│  - ComfyWidgets registry           │
+│  - useCustomWidget()                │
+│  - ComponentWidgetImpl              │
+│  - Widget Registry                  │
 └─────────────────────────────────────┘
                   ↕
 ┌─────────────────────────────────────┐
 │         LiteGraph Layer             │
-│  - BaseWidget                      │
-│  - Node widget system              │
-│  - Graph canvas events             │
+│  - BaseWidget                       │
+│  - Node Widget System               │
+│  - Graph Canvas Events              │
 └─────────────────────────────────────┘
 ```
 
-## Communication Flow Sequence
+**Why This Architecture Works:**
 
-The following sequence diagram shows the complete communication pattern for widget value updates, using our working asset browser example:
+1. **Clear Separation**: Each layer has distinct responsibilities and interfaces
+2. **Maintainable**: Changes in one layer don't cascade to others  
+3. **Testable**: Each layer can be tested independently
+4. **Flexible**: Vue components can use any presentation pattern (modal, inline, dropdown)
+5. **Type Safe**: Well-defined interfaces between layers enable full TypeScript support
+
+**Universal Principle**: The Integration Layer serves as a bridge between incompatible systems - Vue's reactive component model and LiteGraph's imperative widget system.
+
+## Universal Communication Flow Pattern
+
+The following sequence diagram shows the complete communication pattern for widget value updates. This pattern works regardless of presentation style (modal, inline, dropdown, overlay) or domain (assets, models, files, etc.):
 
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant AW as AssetPickerWidget<br/>(Vue Component)
-    participant AB as AssetBrowserDialog<br/>(Vue Component)
+    participant CW as CustomWidget<br/>(Vue Component)
+    participant MD as ModalDialog<br/>(Vue Component)
     participant CWI as ComponentWidgetImpl<br/>(Integration Layer)
     participant BW as BaseWidget<br/>(LiteGraph)
     participant N as LGraphNode<br/>(LiteGraph)
@@ -55,27 +76,27 @@ sequenceDiagram
     Note over U,C: Widget Creation Phase
     N->>+CWI: new ComponentWidgetImpl({ props, options })
     CWI->>CWI: Configure setValue with<br/>canvas context
-    CWI->>+AW: Mount Vue component with props
-    AW-->>-CWI: Component ready
+    CWI->>+CW: Mount Vue component with props
+    CW-->>-CWI: Component ready
     CWI-->>-N: Widget created and registered
 
     Note over U,C: User Interaction Phase
-    U->>+AW: Click browse button
-    AW->>AW: showModal = true
-    AW->>+AB: Modal opens with<br/>:on-select prop
-    AB->>AB: Load and display assets
-    U->>AB: Click asset item
-    AB->>AB: onSelect(asset)
-    AB->>-AW: Call props.onSelect(asset)
+    U->>+CW: Click trigger button/area
+    CW->>CW: showModal = true
+    CW->>+MD: Modal/Interface opens with<br/>:on-select prop
+    MD->>MD: Load and display options
+    U->>MD: Select item/value
+    MD->>MD: onSelect(item)
+    MD->>-CW: Call props.onSelect(item)
     
     Note over U,C: Value Update Phase  
-    AW->>+AW: onAssetSelect(asset)
-    AW->>AW: selectedAsset.value = asset
-    AW->>AW: newValue = asset.filename
-    AW->>+CWI: props.widget.setValue(newValue)
+    CW->>+CW: onItemSelect(item)
+    CW->>CW: selectedItem.value = item
+    CW->>CW: newValue = transformItem(item)
+    CW->>+CWI: props.widget.setValue(newValue)
     
     Note over CWI: Canvas Context Resolution
-    CWI->>CWI: canvas = globalThis.app?.canvas
+    CWI->>CWI: canvas = getCanvasFromApp()
     CWI->>CWI: syntheticEvent = new PointerEvent(...)
     CWI->>CWI: canvasEvent = Object.assign(...)
     
@@ -86,56 +107,156 @@ sequenceDiagram
     N->>N: Update node properties
     N-->>-BW: Node updated
     BW-->>-CWI: setValue complete
-    CWI-->>-AW: Update successful
+    CWI-->>-CW: Update successful
     
     Note over U,C: UI Update Phase
-    AW->>AW: emit('update:modelValue')
-    AW->>AW: showModal = false
-    AW->>-AB: Modal closes
+    CW->>CW: emit('update:modelValue')
+    CW->>CW: showModal = false
+    CW->>-MD: Modal/Interface closes
     
     Note over U,C: Final State
-    Note over AW: Widget displays<br/>selected asset name
+    Note over CW: Widget displays<br/>selected item
     Note over N: Node has new<br/>widget value
     Note over C: Graph version<br/>incremented
 ```
 
-**Key Communication Patterns:**
+**Universal Communication Principles:**
 
 1. **Props Flow Down**: ComponentWidgetImpl → Vue Component via `props`
 2. **Events Flow Up**: Vue Component → ComponentWidgetImpl via configured `setValue`
-3. **Canvas Context**: ComponentWidgetImpl manages LiteGraph integration
+3. **Canvas Context**: ComponentWidgetImpl manages LiteGraph integration requirements
 4. **Value Updates**: BaseWidget handles the actual value change with proper context
 5. **UI Reactivity**: Vue components update automatically via reactive getters
 
-## Widget Replacement Pattern
+This pattern remains identical whether the Vue component presents a modal dialog, inline editor, dropdown selector, or any other interface style.
 
-### 1. Create Widget Composable (`useAssetComboWidget.ts`)
+## Universal Widget Replacement Pattern
 
-**✅ WORKING PATTERN:**
+The core pattern for replacing standard LiteGraph widgets with Vue components follows a consistent structure across all projects:
+
+### 1. Widget Composable Structure (Universal)
+
+**✅ UNIVERSAL PATTERN:**
+```typescript
+export const useCustomWidget = (): WidgetConstructor => {
+  const standardWidget = useStandardWidget()
+  
+  return (node: LGraphNode, inputSpec: InputSpec) => {
+    // Eligibility check - configurable per project
+    const shouldUseCustom = checkCustomWidgetEligibility(node, inputSpec)
+    
+    if (shouldUseCustom) {
+      return createCustomWidget(node, inputSpec)
+    }
+    
+    // Fallback to standard widget behavior
+    return standardWidget(node, inputSpec)
+  }
+}
+
+// Universal ComponentWidgetImpl creation pattern
+function createCustomWidget(node: LGraphNode, inputSpec: InputSpec) {
+  const widgetValue = ref<ValueType>(inputSpec.default || getDefaultValue())
+  
+  const widget = new ComponentWidgetImpl<ValueType>({
+    node,
+    name: inputSpec.name,
+    component: YourCustomComponent,  // Your Vue component
+    inputSpec,
+    
+    // OPTIONS: Internal widget behavior (for LiteGraph system)
+    options: {
+      getValue: () => widgetValue.value,
+      setValue: (value: ValueType) => {
+        widgetValue.value = processIncomingValue(value)
+      }
+    },
+    
+    // PROPS: Vue component properties (for Vue system)
+    props: {
+      widget: {
+        get value() { return widgetValue.value },  // Reactive getter
+        name: inputSpec.name,
+        setValue: (newValue: ValueType) => {
+          // Canvas context provided by app-specific provider
+          const canvas = canvasProvider.getCanvas()
+          const canvasEvent = canvasProvider.createSyntheticEvent()
+          
+          if (!canvas) {
+            throw new Error('Canvas context required for setValue operation')
+          }
+          
+          widget.setValue(newValue, { e: canvasEvent, node, canvas })
+        }
+      },
+      // Additional component-specific props
+      customProp1: yourValue1,
+      customProp2: yourValue2
+    }
+  })
+  
+  addWidget(node, widget)
+  return widget
+}
+```
+
+### 2. Universal Widget Registry Pattern
+
+Replace existing widget types in your project's widget registry:
+
+```typescript
+// Universal registry pattern
+export const WidgetRegistry: Record<string, WidgetConstructor> = {
+  // Replace existing widget types with enhanced versions
+  COMBO: useCustomComboWidget(),
+  STRING: useCustomStringWidget(), 
+  NUMBER: useCustomNumberWidget(),
+  // ... other widget types
+}
+```
+
+**Why Replacement vs Addition Works:**
+- **Automatic Usage**: Existing nodes automatically get enhanced widgets without code changes
+- **Consistent Behavior**: Same node definition produces same widget type across all instances
+- **Extension Compatibility**: Third-party nodes work without modification
+
+---
+
+# Part II: ComfyUI Implementation Reference
+
+This section provides specific working examples using ComfyUI's architecture. These examples demonstrate how universal principles apply in practice.
+
+## ComfyUI-Specific Implementation Patterns
+
+### Asset Browser Widget Example
+
+The following shows how universal patterns are applied to create ComfyUI's asset browser widget:
+
+**ComfyUI useAssetComboWidget Implementation:**
 ```typescript
 export const useAssetComboWidget = (): ComfyWidgetConstructorV2 => {
   const standardComboWidget = useComboWidget()
   
   return (node: LGraphNode, inputSpec: InputSpec) => {
-    // Eligibility check
+    // ComfyUI-specific eligibility check
     const shouldUseAssetBrowser = checkAssetBrowserEligibility(node, inputSpec)
     
     if (shouldUseAssetBrowser) {
       return createAssetPickerWidget(node, inputSpec)
     }
     
-    // Fallback to standard widget
+    // Fallback to standard ComfyUI combo widget
     return standardComboWidget(node, inputSpec)
   }
 }
 
-// Widget creation using ComponentWidgetImpl
+// ComfyUI-specific widget creation
 function createAssetPickerWidget(node: LGraphNode, inputSpec: ComboInputSpec) {
   const widgetValue = ref<string>(inputSpec.default || '')
   const widget = new ComponentWidgetImpl<string | object>({
     node,
     name: inputSpec.name,
-    component: AssetPickerWidget,
+    component: AssetPickerWidget,  // ComfyUI component
     inputSpec,
     options: {
       getValue: () => widgetValue.value,
@@ -149,8 +270,8 @@ function createAssetPickerWidget(node: LGraphNode, inputSpec: ComboInputSpec) {
         get value() { return widgetValue.value },
         name: inputSpec.name,
         setValue: (newValue: string) => {
-          // Proper setValue with canvas context (see Canvas Access Patterns)
-          const canvas = getCanvasFromApp()
+          // ComfyUI-specific canvas access
+          const canvas = app.canvas
           const canvasEvent = createSyntheticPointerEvent()
           widget.setValue(newValue, { e: canvasEvent, node, canvas })
         }
@@ -163,38 +284,128 @@ function createAssetPickerWidget(node: LGraphNode, inputSpec: ComboInputSpec) {
 }
 ```
 
-**❌ BROKEN APPROACHES:**
+**ComfyUI Widget Registry:**
+```typescript
+export const ComfyWidgets: Record<string, ComfyWidgetConstructor> = {
+  // Replace COMBO with enhanced version for ComfyUI
+  COMBO: transformWidgetConstructorV2ToV1(useAssetComboWidget()),
+  // ... other ComfyUI widgets
+}
+```
+
+## ComfyUI-Specific Anti-Patterns
+
+**❌ BROKEN APPROACHES IN COMFYUI:**
 - Direct DOM manipulation instead of ComponentWidgetImpl
 - Modifying existing widgets in-place
 - Intercepting at the UI level instead of widget system level
 
-**Why These Approaches Fail:**
+**Why These Approaches Fail in ComfyUI:**
 
 - **Direct DOM Manipulation**: Bypasses Vue's reactivity system and component lifecycle, leading to memory leaks, broken event handling, and state inconsistencies when the graph updates
 - **In-Place Widget Modification**: LiteGraph widgets have complex initialization and cleanup procedures - modifying them after creation breaks their internal state management and event binding
 - **UI-Level Interception**: Intercepting at the visual layer (like sidebar component) misses the fundamental widget replacement requirement - the graph canvas still creates standard widgets that conflict with the custom UI
 
-### 2. Register Widget in System (`widgets.ts`)
+## ComfyUI Canvas Access Patterns
 
-**✅ WORKING PATTERN:**
+### ComfyUI-Specific Canvas Context
+
+ComfyUI uses a centralized app instance for canvas access:
+
 ```typescript
-export const ComfyWidgets: Record<string, ComfyWidgetConstructor> = {
-  // Replace COMBO with enhanced version
-  COMBO: transformWidgetConstructorV2ToV1(useAssetComboWidget()),
-  // ... other widgets
+import { app } from '@/scripts/app'
+
+// ComfyUI canvas access
+function getCanvasFromApp(): LGraphCanvas {
+  const canvas = app.canvas
+  
+  if (!canvas) {
+    throw new Error('Canvas is required for setValue operation')
+  }
+  
+  return canvas
+}
+
+// ComfyUI synthetic event creation
+function createSyntheticPointerEvent(): CanvasPointerEvent {
+  const syntheticPointerEvent = new PointerEvent('pointerdown', {
+    bubbles: false,
+    cancelable: false,
+    pointerId: -1,
+    pointerType: 'mouse'
+  })
+  
+  return Object.assign(syntheticPointerEvent, {
+    canvasX: 0,
+    canvasY: 0,
+    deltaX: 0,
+    deltaY: 0,
+    safeOffsetX: 0,
+    safeOffsetY: 0
+  }) as CanvasPointerEvent
 }
 ```
 
-**❌ BROKEN APPROACHES:**
-- Adding new widget types instead of replacing existing ones
-- Conditional registration based on settings (breaks consistency)
+## ComfyUI Vue Component Examples
 
-**Why These Approaches Fail:**
+### Modal Asset Browser Pattern
 
-- **Adding New Widget Types**: ComfyUI's node definitions specify widget types (COMBO, STRING, etc.) that map to the ComfyWidgets registry - adding new types means existing nodes won't use them because they still request the original widget type
-- **Conditional Registration**: Settings-dependent widget registration creates inconsistent behavior where the same node definition produces different widgets depending on user settings, breaking reproducibility and extension compatibility
+**ComfyUI AssetPickerWidget.vue:**
+```vue
+<template>
+  <div class="asset-picker-widget">
+    <!-- Widget display -->
+    <div class="selected-asset-display">
+      <span class="asset-name">{{ displayName }}</span>
+      <Button @click="openAssetBrowser" />
+    </div>
+    
+    <!-- ComfyUI uses PrimeVue Dialog -->
+    <Dialog 
+      v-model:visible="showModal"
+      :modal="true"
+      :style="{ width: '80vw', height: '80vh' }"
+    >
+      <AssetBrowserDialog 
+        :onClose="closeAssetBrowser"
+        :onSelect="onAssetSelect"
+      />
+    </Dialog>
+  </div>
+</template>
 
-### 3. Vue Component Integration
+<script setup lang="ts">
+// ComfyUI-specific widget props interface
+interface AssetPickerWidgetProps {
+  widget: {
+    value: string
+    name: string
+    setValue: (newValue: string) => void
+  }
+  nodeType?: string
+  widgetName?: string
+}
+
+const props = withDefaults(defineProps<AssetPickerWidgetProps>(), {
+  nodeType: '',
+  widgetName: ''
+})
+
+const showModal = ref(false)
+const selectedAsset = ref<Asset | null>(null)
+
+const displayName = computed(() => {
+  return selectedAsset.value?.name || props.widget.value || 'None'
+})
+
+const onAssetSelect = (asset: Asset) => {
+  selectedAsset.value = asset
+  const newValue = asset.filename || asset.name
+  props.widget.setValue(newValue)  // Uses ComfyUI canvas context
+  showModal.value = false
+}
+</script>
+```
 
 **Example: Modal Dialog Presentation Pattern**
 
@@ -225,19 +436,41 @@ This demonstrates one common presentation approach - other patterns (inline edit
 </template>
 ```
 
-**❌ BROKEN MODAL-SPECIFIC APPROACHES:**
-- Rendering modal content inline (shows as small popup instead of full-screen overlay)
-- Using `@select` event instead of `:onSelect` prop (prop vs event mismatch)  
-- Missing Dialog wrapper component (breaks proper modal display)
+---
 
-**Why Modal-Specific Failures Occur:**
-- **Inline Content**: Without Dialog wrapper, content renders in the normal document flow instead of as an overlay
-- **Event vs Prop**: AssetBrowserDialog expects function props, not Vue events - the communication pattern must match what the receiving component expects
-- **Missing Wrapper**: PrimeVue modals require specific Dialog component structure for proper z-index, backdrop, and sizing behavior
+# Part III: Adaptation Guide for Other Projects
 
-## Alternative Presentation Patterns
+This section shows how to adapt the universal principles and ComfyUI patterns to other Vue+LiteGraph projects.
 
-The core ComponentWidgetImpl communication pattern works with any Vue component presentation approach:
+## Universal Presentation Patterns
+
+The ComponentWidgetImpl communication pattern works with any Vue component presentation approach. Here are adaptable patterns:
+
+### Modal Dialog Pattern (Universal)
+
+```vue
+<template>
+  <div class="custom-widget">
+    <div class="widget-display">
+      <span class="current-value">{{ displayValue }}</span>
+      <Button @click="openModal" label="Browse..." />
+    </div>
+    
+    <!-- Use your UI framework's dialog component -->
+    <Dialog 
+      v-model:visible="showModal"
+      :modal="true"
+      :style="{ width: '80vw', height: '80vh' }"
+    >
+      <BrowserComponent 
+        :items="availableItems"
+        :on-close="closeModal"
+        :on-select="onItemSelect"
+      />
+    </Dialog>
+  </div>
+</template>
+```
 
 **🎯 Inline Editor Pattern:**
 ```vue
@@ -1244,3 +1477,144 @@ export interface YourCustomWidgetProps {
 5. **Complete Testing**: Always test the full user interaction flow
 
 These patterns work for **any** widget type - the architecture remains the same whether you're building asset browsers, text editors, color pickers, or any other custom widget interface.
+
+## Configuration Templates for Different Architectures
+
+### Canvas Provider Implementations
+
+**Single App Instance Pattern:**
+```typescript
+// For projects with global singleton app pattern (like ComfyUI)
+class SingletonCanvasProvider implements CanvasContextProvider {
+  constructor(private getApp: () => App) {}
+  
+  getCanvas(): LGraphCanvas | null {
+    return this.getApp().canvas
+  }
+  
+  createSyntheticEvent(): CanvasPointerEvent {
+    const baseEvent = new PointerEvent('pointerdown', {
+      bubbles: false, cancelable: false, pointerId: -1, pointerType: 'mouse'
+    })
+    
+    return Object.assign(baseEvent, {
+      canvasX: 0, canvasY: 0, deltaX: 0, deltaY: 0,
+      safeOffsetX: 0, safeOffsetY: 0
+    }) as CanvasPointerEvent
+  }
+}
+```
+
+**Dependency Injection Pattern:**
+```typescript
+// For projects using DI containers
+class DICanvasProvider implements CanvasContextProvider {
+  constructor(private container: DIContainer) {}
+  
+  getCanvas(): LGraphCanvas | null {
+    return this.container.get<LGraphCanvas>('canvas')
+  }
+  
+  createSyntheticEvent(): CanvasPointerEvent {
+    // Same event creation pattern
+  }
+}
+```
+
+**Store-Based Pattern:**
+```typescript
+// For projects using centralized state (Pinia, Vuex, etc.)
+class StoreCanvasProvider implements CanvasContextProvider {
+  constructor(private store: AppStore) {}
+  
+  getCanvas(): LGraphCanvas | null {
+    return this.store.state.canvas
+  }
+  
+  createSyntheticEvent(): CanvasPointerEvent {
+    // Same event creation pattern
+  }
+}
+```
+
+### Project Configuration Setup
+
+```typescript
+// Configure widget integration for your project
+interface WidgetIntegrationConfig {
+  canvasProvider: CanvasContextProvider
+  eligibilityRules: EligibilityRule[]
+  widgetRegistry: Record<string, WidgetConstructor>
+}
+
+// Example configuration
+const config: WidgetIntegrationConfig = {
+  canvasProvider: new YourCanvasProvider(yourAppInstance),
+  eligibilityRules: [
+    createPatternRule(['file', 'path'], 'FileBrowser'),
+    createPatternRule(['color', 'rgb'], 'ColorPicker'),
+    createNodeTypeRule(['YourCustomNode'])
+  ],
+  widgetRegistry: {
+    COMBO: useYourComboWidget(),
+    STRING: useYourStringWidget()
+  }
+}
+```
+
+### Domain-Specific Adaptations
+
+**For Media/Asset Management Projects:**
+```typescript
+const mediaEligibilityRules = [
+  createPatternRule(['image', 'texture', 'model'], 'AssetBrowser'),
+  createPatternRule(['audio', 'sound'], 'AudioBrowser'),
+  createPatternRule(['video', 'clip'], 'VideoBrowser')
+]
+```
+
+**For Data Processing Projects:**
+```typescript
+const dataEligibilityRules = [
+  createPatternRule(['dataset', 'data', 'input'], 'DataBrowser'),
+  createPatternRule(['transform', 'filter'], 'TransformEditor'),
+  createPatternRule(['output', 'export'], 'ExportConfig')
+]
+```
+
+**For Game Development Projects:**
+```typescript
+const gameEligibilityRules = [
+  createPatternRule(['sprite', 'animation'], 'SpriteBrowser'),
+  createPatternRule(['scene', 'level'], 'SceneBrowser'),
+  createPatternRule(['shader', 'material'], 'ShaderEditor')
+]
+```
+
+## Summary: Universal vs Project-Specific Elements
+
+### Always Universal (Apply to Any Project):
+- Three-layer architecture (Vue ↔ Integration ↔ LiteGraph)
+- ComponentWidgetImpl structure with options/props separation
+- Reactive getter pattern for widget values
+- Canvas context requirements for setValue operations
+- Widget replacement strategy (replace existing types vs. add new)
+- Type safety patterns avoiding `as any` assertions
+
+### Project-Specific Customization Points:
+- **Canvas Provider Implementation**: How your app accesses the canvas
+- **Eligibility Rules**: Which widgets get custom treatment
+- **Value Transformations**: How to process widget values for your domain
+- **UI Framework**: PrimeVue, Quasar, Element Plus, etc.
+- **Presentation Style**: Modal, inline, dropdown based on your UX requirements
+
+### Migration Path from Project-Specific to Universal:
+
+1. **Identify Current Canvas Access**: How does your project get the LiteGraph canvas?
+2. **Extract Value Logic**: What domain-specific transformations do you need?
+3. **Define Eligibility Patterns**: Which widget names/types should get custom treatment?
+4. **Choose Presentation Style**: Modal, inline, dropdown, or overlay?
+5. **Implement Canvas Provider**: Create provider matching your app architecture
+6. **Configure Widget Registry**: Replace existing types with enhanced versions
+
+This guide provides both the universal architectural foundation and the project-specific configuration flexibility needed to implement Vue+LiteGraph widget integration in any codebase.
