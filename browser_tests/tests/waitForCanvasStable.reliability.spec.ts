@@ -120,14 +120,27 @@ test.describe('waitForCanvasStable() Reliability Tests', () => {
     await comfyPage.loadWorkflow('inputs/simple_slider')
 
     // Artificially create an unstable state that persists beyond the timeout period
+    // Block multiple stability conditions to ensure timeout occurs
     await comfyPage.page.evaluate(() => {
       const interval = setInterval(() => {
         if (window['app'] && window['app'].graph) {
+          // Block graph stability
           window['app'].graph.dirty = true
+
+          // Also block canvas stability as backup
+          if (window['app'].canvas) {
+            window['app'].canvas.rendering = true
+          }
+
+          // Also block workflow stability as additional backup
+          if (window['app'].extensionManager?.workflow) {
+            window['app'].extensionManager.workflow.isBusy = true
+          }
         }
-      }, 100)
-      // Clear after a longer time to ensure timeout occurs first (3 seconds > 1 second timeout)
-      setTimeout(() => clearInterval(interval), 3000)
+      }, 50) // Shorter interval to reduce timing windows
+
+      // Clear after longer time to ensure 1-second timeout occurs first
+      setTimeout(() => clearInterval(interval), 5000)
     })
 
     // This should timeout after 1 second and throw an error

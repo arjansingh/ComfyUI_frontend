@@ -52,6 +52,20 @@ test.describe('Remote COMBO Widget', () => {
     await comfyPage.waitForWidgetStable()
   }
 
+  const triggerWidgetRetry = async (comfyPage: ComfyPage, nodeName: string) => {
+    // Directly access widget options to trigger getValue() and potential retry
+    await comfyPage.page.evaluate((name) => {
+      const node = window['app'].graph.nodes.find((node) => node.title === name)
+      if (node && node.widgets && node.widgets[0]) {
+        // Access the options property to trigger getValue() in useRemoteWidget
+        const options = node.widgets[0].options?.values
+        // Force a re-render to ensure the widget updates
+        node.graph?.setDirtyCanvas(true)
+      }
+    }, nodeName)
+    await comfyPage.waitForWidgetStable()
+  }
+
   test.beforeEach(async ({ comfyPage }) => {
     await comfyPage.setSetting('Comfy.UseNewMenu', 'Top')
   })
@@ -265,13 +279,13 @@ test.describe('Remote COMBO Widget', () => {
       // Wait for backoff to expire and retry using expect().toPass() instead of fixed timeouts
       // First backoff should be ~1000ms, wait for it to expire then trigger retry
       await expect(async () => {
-        await waitForWidgetUpdate(comfyPage)
+        await triggerWidgetRetry(comfyPage, nodeName)
         expect(timestamps.length).toBeGreaterThanOrEqual(2)
       }).toPass({ timeout: 2000 })
 
       // Second backoff should be ~2000ms, wait for it to expire then trigger retry
       await expect(async () => {
-        await waitForWidgetUpdate(comfyPage)
+        await triggerWidgetRetry(comfyPage, nodeName)
         expect(timestamps.length).toBeGreaterThanOrEqual(3)
       }).toPass({ timeout: 4000 })
 

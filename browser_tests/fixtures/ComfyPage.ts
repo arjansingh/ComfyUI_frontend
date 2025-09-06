@@ -432,78 +432,124 @@ export class ComfyPage {
       console.log(`[waitForCanvasStable] ${msg}`, data || '')
     }
 
-    debug(`Starting stability check with ${timeoutMs}ms timeout`)
+    // Detect CI environment for adaptive behavior
+    const isCI =
+      process.env.CI === 'true' ||
+      process.env.GITHUB_ACTIONS === 'true' ||
+      process.env.NODE_ENV === 'test'
+    const debounceMs = isCI ? 100 : 50 // Reduced for faster test execution
 
-    // First ensure app is fully initialized (same as setup process)
+    // Proportional timeout allocation (20% for app init, 80% for stability)
+    const appInitTimeout = Math.max(
+      Math.min(Math.floor(timeoutMs * 0.2), 2000),
+      500
+    )
+    const stabilityTimeout = timeoutMs - appInitTimeout
+
+    debug(
+      `Starting stability check with ${timeoutMs}ms timeout (${appInitTimeout}ms app init, ${stabilityTimeout}ms stability, ${debounceMs}ms debounce)`
+    )
+
+    // First ensure app is fully initialized
     await this.page.waitForFunction(
       () =>
-        // Ensure both app and extensionManager are available (same checks as setup)
         window['app'] && window['app'].extensionManager && window['app'].graph,
-      { timeout: timeoutMs }
+      { timeout: appInitTimeout }
     )
 
     debug('App initialization check passed')
 
-    // Then wait for canvas to be in stable state
+    // Main stability check with debounced detection
     await this.page.waitForFunction(
-      () => {
+      (debounceMs: number) => {
         const app = window['app']
         const graph = app.graph
+        const now = Date.now()
 
-        // Check that graph is not dirty (no pending updates)
-        const isGraphStable = graph.dirty === false || graph.dirty == null
-
-        // Check that canvas is not actively rendering
-        const isCanvasStable = !app.canvas?.rendering
-
-        // Check workflow isn't busy (similar to Topbar.ts approach)
-        const isWorkflowStable = !app.extensionManager?.workflow?.isBusy
-
-        // Simplified widget checking with better error handling
-        let areWidgetsStable = true
-        let unstableWidgetCount = 0
-        try {
-          if (graph.nodes && Array.isArray(graph.nodes)) {
-            graph.nodes.forEach((node: any) => {
-              node.widgets?.forEach?.((widget: any) => {
-                if (widget?.pending === true || widget?.updating === true) {
-                  unstableWidgetCount++
-                  areWidgetsStable = false
-                }
-              })
-            })
+        // Initialize or reset stability tracker for clean test runs
+        if (
+          !window['_stabilityTracker'] ||
+          window['_stabilityTracker'].debounceMs !== debounceMs
+        ) {
+          window['_stabilityTracker'] = {
+            lastStableTime: null,
+            debounceMs: debounceMs,
+            isStable: false
           }
-        } catch (e) {
-          console.log(`[waitForCanvasStable] Widget check error:`, e)
-          // If widget checking fails, assume stable to avoid blocking
-          areWidgetsStable = true
         }
 
-        const isStable =
-          isGraphStable &&
-          isCanvasStable &&
-          isWorkflowStable &&
-          areWidgetsStable
+        const tracker = window['_stabilityTracker']
 
-        // Log current state for debugging (only when unstable to avoid spam)
-        if (!isStable) {
-          console.log(`[waitForCanvasStable] Unstable state detected:`, {
-            timestamp: Date.now(),
-            graphDirty: graph.dirty,
-            isGraphStable,
-            canvasRendering: app.canvas?.rendering,
-            isCanvasStable,
-            workflowBusy: app.extensionManager?.workflow?.isBusy,
-            isWorkflowStable,
-            unstableWidgetCount,
-            areWidgetsStable,
-            nodeCount: graph.nodes?.length || 0
-          })
+        // Quick bail-outs first (guard clauses) - reset tracker on any instability
+        if (graph.dirty === true) {
+          tracker.lastStableTime = null
+          return false
+        }
+        if (app.canvas?.rendering === true) {
+          tracker.lastStableTime = null
+          return false
+        }
+        if (app.extensionManager?.workflow?.isBusy === true) {
+          tracker.lastStableTime = null
+          return false
         }
 
-        return isStable
+        // Widget stability check with early return
+        if (graph.nodes && Array.isArray(graph.nodes)) {
+          try {
+            for (const node of graph.nodes) {
+              if (!node.widgets) continue
+
+              for (const widget of node.widgets) {
+                if (widget?.pending === true || widget?.updating === true) {
+                  tracker.lastStableTime = null
+                  return false // Early return on first unstable widget
+                }
+              }
+            }
+          } catch (e) {
+            console.log(`[waitForCanvasStable] Widget check error:`, e)
+            // If widget checking fails, assume stable to avoid blocking
+          }
+        }
+
+        // All individual checks passed - handle debounced stability tracking
+
+        if (tracker.lastStableTime === null) {
+          tracker.lastStableTime = now
+          console.log(
+            `[waitForCanvasStable] Starting stability timer at ${now}`
+          )
+          return (tracker.isStable = false)
+        }
+
+        const stableDuration = now - tracker.lastStableTime
+        const hasBeenStableLongEnough = stableDuration >= tracker.debounceMs
+        const finalStable = (tracker.isStable = hasBeenStableLongEnough)
+
+        // Safety mechanism: if we've been trying for too long (>2s), assume stable
+        const maxWaitTime = 2000
+        const safetyOverride = stableDuration > maxWaitTime
+
+        if (safetyOverride) {
+          console.log(
+            `[waitForCanvasStable] Safety override triggered after ${stableDuration}ms`
+          )
+          return (tracker.isStable = true)
+        }
+
+        // Log progress for debugging
+        console.log(`[waitForCanvasStable] Stability progress:`, {
+          stableDuration,
+          debounceRequired: tracker.debounceMs,
+          finalStable,
+          nodeCount: graph.nodes?.length || 0
+        })
+
+        return finalStable
       },
-      { timeout: Math.max(timeoutMs - 1000, 1000) } // Reserve some time for initial app check
+      { timeout: stabilityTimeout },
+      debounceMs
     )
 
     debug('Canvas stability check passed')
