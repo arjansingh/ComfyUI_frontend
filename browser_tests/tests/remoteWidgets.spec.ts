@@ -277,13 +277,13 @@ test.describe('Remote COMBO Widget', () => {
       await waitForWidgetUpdate(comfyPage)
 
       // Wait for backoff to expire and retry using expect().toPass() instead of fixed timeouts
-      // First backoff should be ~1000ms, wait for it to expire then trigger retry
+      // First backoff should be ~1000ms with new exponential backoff (was 512ms), allow buffer for retry
       await expect(async () => {
         await triggerWidgetRetry(comfyPage, nodeName)
         expect(timestamps.length).toBeGreaterThanOrEqual(2)
-      }).toPass({ timeout: 2000 })
+      }).toPass({ timeout: 3000 })
 
-      // Second backoff should be ~2000ms, wait for it to expire then trigger retry
+      // Second backoff should be ~2000ms with exponential backoff, wait for it to expire then trigger retry
       await expect(async () => {
         await triggerWidgetRetry(comfyPage, nodeName)
         expect(timestamps.length).toBeGreaterThanOrEqual(3)
