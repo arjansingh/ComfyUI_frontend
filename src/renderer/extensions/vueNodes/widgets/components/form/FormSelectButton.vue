@@ -57,7 +57,9 @@ interface Emits {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  disabled: false
+  disabled: false,
+  optionLabel: 'label',
+  optionValue: 'value'
 })
 
 const emit = defineEmits<Emits>()
