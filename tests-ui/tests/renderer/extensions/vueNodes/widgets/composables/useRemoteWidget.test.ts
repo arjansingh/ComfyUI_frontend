@@ -42,7 +42,7 @@ vi.mock('@/composables/functional/useChainCallback', () => ({
   })
 }))
 
-const FIRST_BACKOFF = 1000 // backoff is 1s on first retry
+const BACKOFF_SAFE_TIME = 3000 // Time advance that ensures backoff period has passed
 const DEFAULT_VALUE = 'Loading...'
 
 function createMockConfig(overrides = {}): RemoteWidgetConfig {
@@ -239,7 +239,7 @@ describe('useRemoteWidget', () => {
         await getResolvedValue(hook)
         expect(vi.mocked(axios.get)).toHaveBeenCalledTimes(1)
 
-        vi.setSystemTime(Date.now() + FIRST_BACKOFF)
+        vi.setSystemTime(Date.now() + BACKOFF_SAFE_TIME)
         const secondData = await getResolvedValue(hook)
         expect(secondData).toBe('Loading...')
         expect(vi.mocked(axios.get)).toHaveBeenCalledTimes(2)
@@ -293,7 +293,7 @@ describe('useRemoteWidget', () => {
       expect(vi.mocked(axios.get)).toHaveBeenCalledTimes(2)
 
       mockAxiosResponse(['second success'])
-      vi.setSystemTime(Date.now() + FIRST_BACKOFF)
+      vi.setSystemTime(Date.now() + BACKOFF_SAFE_TIME)
       const thirdData = await getResolvedValue(hook)
       expect(thirdData).toEqual(['second success'])
       expect(vi.mocked(axios.get)).toHaveBeenCalledTimes(3)
@@ -338,7 +338,7 @@ describe('useRemoteWidget', () => {
       await getResolvedValue(hook)
       expect(vi.mocked(axios.get)).toHaveBeenCalledTimes(1) // Still backing off
 
-      vi.setSystemTime(Date.now() + 3000)
+      vi.setSystemTime(Date.now() + BACKOFF_SAFE_TIME)
       await getResolvedValue(hook)
       expect(vi.mocked(axios.get)).toHaveBeenCalledTimes(2)
       expect(entry1?.data).toBeDefined()
@@ -350,7 +350,7 @@ describe('useRemoteWidget', () => {
       const firstData = await getResolvedValue(hook)
       expect(firstData).toBe('Loading...')
 
-      vi.setSystemTime(Date.now() + 3000)
+      vi.setSystemTime(Date.now() + BACKOFF_SAFE_TIME)
       mockAxiosResponse(['option1'])
       const secondData = await getResolvedValue(hook)
       expect(secondData).toEqual(['option1'])
@@ -367,7 +367,7 @@ describe('useRemoteWidget', () => {
       const entry1 = hook.getCacheEntry()
       expect(entry1?.error).toBeTruthy()
 
-      vi.setSystemTime(Date.now() + 3000)
+      vi.setSystemTime(Date.now() + BACKOFF_SAFE_TIME)
       mockAxiosResponse(['success after backoff'])
       const secondData = await getResolvedValue(hook)
       expect(secondData).toEqual(['success after backoff'])
@@ -386,7 +386,7 @@ describe('useRemoteWidget', () => {
       const entry1 = hook.getCacheEntry()
       expect(entry1?.error).toBeTruthy()
 
-      vi.setSystemTime(Date.now() + 3000)
+      vi.setSystemTime(Date.now() + BACKOFF_SAFE_TIME)
       const secondData = await getResolvedValue(hook)
       expect(secondData).toBe('Loading...')
       expect(entry1?.error).toBeDefined()
