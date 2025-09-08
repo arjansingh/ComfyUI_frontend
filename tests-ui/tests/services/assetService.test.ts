@@ -107,7 +107,6 @@ describe('assetService', () => {
     it('should return filtered models for folder', async () => {
       const assets = [
         { ...MOCK_ASSETS.checkpoints, name: 'valid.safetensors' },
-        { ...MOCK_ASSETS.checkpoints, name: undefined }, // Invalid name
         { ...MOCK_ASSETS.loras, name: 'lora.safetensors' }, // Wrong tag
         {
           id: 'uuid-4',

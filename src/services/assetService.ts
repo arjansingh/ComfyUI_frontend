@@ -1,63 +1,47 @@
+import { fromZodError } from 'zod-validation-error'
+
+import {
+  type Asset,
+  type AssetResponse,
+  type ModelFolder,
+  assetResponseSchema
+} from '@/schemas/assetSchema'
 import { api } from '@/scripts/api'
 
 const ASSETS_ENDPOINT = '/assets'
 const MODELS_TAG = 'models'
 const MISSING_TAG = 'missing'
 
-// Types for asset API responses
-interface AssetResponse {
-  assets?: Asset[]
-  total?: number
-  has_more?: boolean
-}
+/**
+ * Validates asset response data using Zod schema
+ */
+function validateAssetResponse(data: unknown): AssetResponse {
+  const result = assetResponseSchema.safeParse(data)
+  if (result.success) return result.data
 
-interface Asset {
-  id: string
-  name: string
-  tags: string[]
-  size: number
-  created_at?: string
+  const error = fromZodError(result.error)
+  throw new Error(`Invalid asset response against zod schema:\n${error}`)
 }
 
 /**
- * Type guard for validating asset structure
+ * Filters assets by folder and excludes missing ones
  */
-function isValidAsset(asset: unknown): asset is Asset {
-  return (
-    asset !== null &&
-    typeof asset === 'object' &&
-    'id' in asset &&
-    'name' in asset &&
-    'tags' in asset &&
-    Array.isArray((asset as Asset).tags)
-  )
-}
-
-/**
- * Creates predicate for filtering assets by folder and excluding missing ones
- */
-function createAssetFolderFilter(folder?: string) {
-  return (asset: unknown): asset is Asset => {
-    if (!isValidAsset(asset) || asset.tags.includes(MISSING_TAG)) {
-      return false
-    }
-    if (folder && !asset.tags.includes(folder)) {
-      return false
-    }
+function filterAssetsByFolder(assets: Asset[], folder?: string): Asset[] {
+  return assets.filter((asset) => {
+    if (asset.tags.includes(MISSING_TAG)) return false
+    if (folder && !asset.tags.includes(folder)) return false
     return true
-  }
+  })
 }
 
 /**
- * Creates predicate for filtering folder assets (requires name)
+ * Filters folder assets (excludes missing)
  */
-function createFolderAssetFilter(folder: string) {
-  return (asset: unknown): asset is Asset => {
-    if (!isValidAsset(asset) || !asset.name) {
-      return false
-    }
-    return asset.tags.includes(folder) && !asset.tags.includes(MISSING_TAG)
-  }
+function filterFolderAssets(assets: Asset[], folder: string): Asset[] {
+  return assets.filter((asset) => {
+    if (asset.tags.includes(MISSING_TAG)) return false
+    return asset.tags.includes(folder)
+  })
 }
 
 /**
@@ -66,7 +50,7 @@ function createFolderAssetFilter(folder: string) {
  */
 function createAssetService() {
   /**
-   * Handles API response with consistent error handling
+   * Handles API response with consistent error handling and Zod validation
    */
   async function handleAssetRequest(
     url: string,
@@ -78,7 +62,8 @@ function createAssetService() {
         `Unable to load ${context}: Server returned ${res.status}. Please try again.`
       )
     }
-    return await res.json()
+    const data = await res.json()
+    return validateAssetResponse(data)
   }
   /**
    * Gets a list of model folder keys from the asset API
@@ -90,9 +75,7 @@ function createAssetService() {
    *
    * @returns The list of model folder keys
    */
-  async function getAssetModelFolders(): Promise<
-    { name: string; folders: string[] }[]
-  > {
+  async function getAssetModelFolders(): Promise<ModelFolder[]> {
     const data = await handleAssetRequest(
       `${ASSETS_ENDPOINT}?include_tags=${MODELS_TAG}`,
       'model folders'
@@ -102,19 +85,16 @@ function createAssetService() {
     const blacklistedDirectories = ['configs']
 
     // Extract directory names from assets that actually exist, exclude missing assets
-    const discoveredFolders = new Set<string>()
-    if (data?.assets) {
-      const directoryTags = data.assets
-        .filter(createAssetFolderFilter())
-        .flatMap((asset) => asset.tags)
-        .filter(
-          (tag) => tag !== MODELS_TAG && !blacklistedDirectories.includes(tag)
-        )
-
-      for (const tag of directoryTags) {
-        discoveredFolders.add(tag)
-      }
-    }
+    const discoveredFolders = new Set<string>(
+      data?.assets
+        ? filterAssetsByFolder(data.assets)
+            .flatMap((asset) => asset.tags)
+            .filter(
+              (tag) =>
+                tag !== MODELS_TAG && !blacklistedDirectories.includes(tag)
+            )
+        : []
+    )
 
     // Return only discovered folders in alphabetical order
     const sortedFolders = Array.from(discoveredFolders).sort()
@@ -135,7 +115,7 @@ function createAssetService() {
     )
 
     return data?.assets
-      ? data.assets.filter(createFolderAssetFilter(folder)).map((asset) => ({
+      ? filterFolderAssets(data.assets, folder).map((asset) => ({
           name: asset.name,
           pathIndex: 0
         }))
