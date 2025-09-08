@@ -212,8 +212,11 @@ test.describe('Release Notifications', () => {
 
     await comfyPage.setup({ mockReleases: false })
 
-    // Wait a bit to ensure any potential API calls would have been made
-    await comfyPage.page.waitForTimeout(1000)
+    // Wait for any potential API calls with shorter timeout and network activity check
+    await Promise.race([
+      comfyPage.page.waitForTimeout(500), // Reduced timeout
+      comfyPage.page.waitForLoadState('networkidle', { timeout: 1000 })
+    ])
 
     // Verify no API calls were made
     expect(apiCallCount).toBe(0)

@@ -116,7 +116,18 @@ export class WorkflowsSidebarTab extends SidebarTab {
   async switchToWorkflow(workflowName: string) {
     const workflowLocator = this.getOpenedItem(workflowName)
     await workflowLocator.click()
-    await this.page.waitForTimeout(300)
+
+    // Wait for workflow to actually become active instead of fixed timeout
+    await this.page.waitForFunction(
+      (name) => {
+        const activeTab = document.querySelector(
+          '.comfyui-workflows-open .node-label.active'
+        )
+        return activeTab && activeTab.textContent?.includes(name)
+      },
+      workflowName,
+      { timeout: 5000 }
+    )
   }
 
   getOpenedItem(name: string) {
@@ -138,7 +149,16 @@ export class WorkflowsSidebarTab extends SidebarTab {
       .click()
     await this.page.keyboard.type(newName)
     await this.page.keyboard.press('Enter')
-    await this.page.waitForTimeout(300)
+
+    // Wait for rename to complete by checking if the new name appears
+    await this.page.waitForFunction(
+      (name) => {
+        const labels = Array.from(document.querySelectorAll('.node-label'))
+        return labels.some((label) => label.textContent?.includes(name))
+      },
+      newName,
+      { timeout: 5000 }
+    )
   }
 
   async insertWorkflow(locator: Locator) {

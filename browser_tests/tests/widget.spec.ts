@@ -232,8 +232,8 @@ test.describe('Animated image widget', () => {
       'animated_image_preview_drag_and_dropped.png'
     )
 
-    // Wait for animation to go to next frame
-    await comfyPage.page.waitForTimeout(512)
+    // Wait for animation to go to next frame - use canvas stability instead of fixed timeout
+    await comfyPage.waitForCanvasStable()
 
     // Move mouse and click on canvas to trigger render
     await comfyPage.page.mouse.click(64, 64)
@@ -298,8 +298,8 @@ test.describe('Animated image widget', () => {
     )
     await comfyPage.nextFrame()
 
-    // Wait for animation to go to next frame
-    await comfyPage.page.waitForTimeout(512)
+    // Wait for animation to go to next frame - use canvas stability instead of fixed timeout
+    await comfyPage.waitForCanvasStable()
 
     // Move mouse and click on canvas to trigger render
     await comfyPage.page.mouse.click(64, 64)

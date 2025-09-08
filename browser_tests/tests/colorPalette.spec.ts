@@ -199,7 +199,8 @@ test.describe('Node Color Adjustments', () => {
     comfyPage
   }) => {
     await comfyPage.setSetting('Comfy.Node.Opacity', 0.5)
-    await comfyPage.page.waitForTimeout(128)
+    // Wait for canvas to reflect opacity change instead of fixed timeout
+    await comfyPage.waitForCanvasStable()
 
     // Drag mouse to force canvas to redraw
     await comfyPage.page.mouse.move(0, 0)
@@ -207,7 +208,8 @@ test.describe('Node Color Adjustments', () => {
     await expect(comfyPage.canvas).toHaveScreenshot('node-opacity-0.5.png')
 
     await comfyPage.setSetting('Comfy.Node.Opacity', 1.0)
-    await comfyPage.page.waitForTimeout(128)
+    // Wait for canvas to reflect opacity change instead of fixed timeout
+    await comfyPage.waitForCanvasStable()
 
     await comfyPage.page.mouse.move(8, 8)
     await expect(comfyPage.canvas).toHaveScreenshot('node-opacity-1.png')
