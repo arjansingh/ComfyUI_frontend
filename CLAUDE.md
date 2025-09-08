@@ -119,6 +119,7 @@ const value = api.getServerFeature('config_name', defaultValue)  // Get config
 **Documentation:**
 - Settings system: `docs/SETTINGS.md`
 - Feature flags system: `docs/FEATURE_FLAGS.md`
+- Zod validation patterns: `docs/ZOD_BEST_PRACTICES.md`
 
 ## Common Pitfalls
 
