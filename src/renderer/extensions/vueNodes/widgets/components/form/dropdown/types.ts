@@ -7,8 +7,9 @@ export type SelectedKey = OptionId
 
 export interface DropdownItem {
   id: SelectedKey
-  mediaSrc: string // URL for image, video, or other media
+  mediaSrc: string
   name: string
+  label?: string
   metadata: string
 }
 export interface SortOption {
